@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PlusCircle, ListTodo, Menu, LogOut, User } from "lucide-react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";  // 👈 import navigate hook
+import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { auth } from "./firebase"; 
+import { auth, database } from "./firebase";
+import { ref, set, push, onValue, remove } from "firebase/database";
 
 export default function TaskManager() {
   const [activeTab, setActiveTab] = useState("add");
@@ -13,23 +14,49 @@ export default function TaskManager() {
   const [priority, setPriority] = useState("Medium");
   const [tasks, setTasks] = useState([]);
 
-  const navigate = useNavigate(); // 👈 initialize navigate
+  const navigate = useNavigate();
+  const user = auth.currentUser;
 
-  const handleSubmit = (e) => {
+  // 🔹 Load tasks from Firebase
+  useEffect(() => {
+    if (!user) return;
+
+    const tasksRef = ref(database, "tasks/" + user.uid);
+    const unsubscribe = onValue(tasksRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setTasks(Object.entries(data).map(([id, task]) => ({ id, ...task })));
+      } else {
+        setTasks([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // 🔹 Save new task to Firebase
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!taskTitle.trim()) return;
+    if (!taskTitle.trim() || !user) return;
 
     const newTask = {
-      id: Date.now(),
       title: taskTitle,
       description,
       dueDate,
       priority,
       completed: false,
     };
-    setTasks([...tasks, newTask]);
-    resetForm();
-    setActiveTab("view");
+
+    try {
+      const tasksRef = ref(database, "tasks/" + user.uid);
+      const newTaskRef = push(tasksRef); // auto-generate ID
+      await set(newTaskRef, newTask);
+
+      resetForm();
+      setActiveTab("view");
+    } catch (err) {
+      console.error("Error saving task:", err);
+    }
   };
 
   const resetForm = () => {
@@ -39,11 +66,17 @@ export default function TaskManager() {
     setPriority("Medium");
   };
 
+  // 🔹 Delete task
+  const handleDelete = async (taskId) => {
+    if (!user) return;
+    await remove(ref(database, `tasks/${user.uid}/${taskId}`));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-indigo-100 flex flex-col items-center justify-start py-10">
       {/* 🔙 Back Button */}
       <button
-        onClick={() => navigate("/menu")} // 👈 go to menu page
+        onClick={() => navigate("/menu")}
         className="mb-6 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
       >
         🔙 Back to Menu
@@ -61,8 +94,10 @@ export default function TaskManager() {
           onClick={() => setActiveTab("view")}
           whileTap={{ scale: 0.95 }}
           animate={{
-            backgroundColor: activeTab === "view" ? "rgb(99 102 241)" : "rgb(255 255 255)",
-            color: activeTab === "view" ? "rgb(255 255 255)" : "rgb(75 85 99)",
+            backgroundColor:
+              activeTab === "view" ? "rgb(99 102 241)" : "rgb(255 255 255)",
+            color:
+              activeTab === "view" ? "rgb(255 255 255)" : "rgb(75 85 99)",
           }}
           transition={{ duration: 0.2 }}
           className="px-6 py-2 rounded-full shadow-md flex items-center gap-2"
@@ -74,8 +109,10 @@ export default function TaskManager() {
           onClick={() => setActiveTab("add")}
           whileTap={{ scale: 0.95 }}
           animate={{
-            backgroundColor: activeTab === "add" ? "rgb(99 102 241)" : "rgb(255 255 255)",
-            color: activeTab === "add" ? "rgb(255 255 255)" : "rgb(75 85 99)",
+            backgroundColor:
+              activeTab === "add" ? "rgb(99 102 241)" : "rgb(255 255 255)",
+            color:
+              activeTab === "add" ? "rgb(255 255 255)" : "rgb(75 85 99)",
           }}
           transition={{ duration: 0.2 }}
           className="px-6 py-2 rounded-full shadow-md flex items-center gap-2"
@@ -207,6 +244,12 @@ export default function TaskManager() {
                         <span className="font-semibold">{task.priority}</span>
                       </p>
                     </div>
+                    <button
+                      onClick={() => handleDelete(task.id)}
+                      className="text-red-500 hover:underline text-sm"
+                    >
+                      ❌ Delete
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -226,14 +269,14 @@ export default function TaskManager() {
           {/* Dropdown */}
           <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
             <button
-              onClick={() => navigate("/profile")} // 👈 navigate to profile
+              onClick={() => navigate("/profile")}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             >
               <User size={16} className="mr-2" /> Edit Profile
             </button>
 
             <button
-              onClick={() => navigate("/changepassword")} // 👈 navigate to change password
+              onClick={() => navigate("/changepassword")}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             >
               🔒 Change Password
@@ -242,7 +285,7 @@ export default function TaskManager() {
             <button
               onClick={async () => {
                 await signOut(auth);
-                navigate("/"); // 👈 back to auth screen
+                navigate("/");
               }}
               className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
             >
