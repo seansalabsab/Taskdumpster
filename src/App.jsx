@@ -2,11 +2,11 @@ import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-route
 import { AnimatePresence, motion } from "framer-motion";
 
 import AuthScreen from "./AuthScreen";
-import MenuScreen from "./MenuScreen";
 import EditProfile from "./EditProfile";
 import TaskManager from "./TaskManager";
 import ChangePassword from "./ChangePassword";
 
+// // ✅ Reusable fade animation wrapper
 function AnimatedPage({ children }) {
   return (
     <motion.div
@@ -20,57 +20,61 @@ function AnimatedPage({ children }) {
   );
 }
 
+// ✅ Main routes
+function AppRoutes() {
+  const navigate = useNavigate();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes>
+        {/* Auth Screen (login page) */}
+        <Route
+          path="/"
+          element={
+            <AnimatedPage>
+              <AuthScreen onAuthSuccess={() => navigate("/TaskManager")} />
+            </AnimatedPage>
+          }
+        />
+
+        {/* Task Manager (main app) */}
+        <Route
+          path="/TaskManager"
+          element={
+            <AnimatedPage>
+              <TaskManager />
+            </AnimatedPage>
+          }
+        />
+
+        {/* Profile Page */}
+        <Route
+          path="/EditProfile"
+          element={
+            <AnimatedPage>
+              <EditProfile />
+            </AnimatedPage>
+          }
+        />
+
+        {/* Change Password Page */}
+        <Route
+          path="/ChangePassword"
+          element={
+            <AnimatedPage>
+              <ChangePassword />
+            </AnimatedPage>
+          }
+        />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
 export default function App() {
   return (
     <Router>
-      <AnimatePresence mode="wait">
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <AnimatedPage>
-                <AuthScreen onAuthSuccess={() => (window.location.href = "/menu")} />
-              </AnimatedPage>
-            }
-          />
-
-          <Route
-            path="/menu"
-            element={
-              <AnimatedPage>
-                <MenuScreen onNavigate={(page) => (window.location.href = `/${page}`)} />
-              </AnimatedPage>
-            }
-          />
-
-          <Route
-            path="/taskmanager"
-            element={
-              <AnimatedPage>
-                <TaskManager />
-              </AnimatedPage>
-            }
-          />
-
-          <Route
-            path="/profile"
-            element={
-              <AnimatedPage>
-                <EditProfile />
-              </AnimatedPage>
-            }
-          />
-
-          <Route
-            path="/changepassword"
-            element={
-              <AnimatedPage>
-                <ChangePassword />
-              </AnimatedPage>
-            }
-          />
-        </Routes>
-      </AnimatePresence>
+      <AppRoutes />
     </Router>
   );
 }

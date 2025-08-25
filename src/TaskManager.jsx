@@ -7,12 +7,11 @@ import {
   User,
   CheckCircle,
   Trash2,
+  Edit3,
+  X,
+  ChevronDown,
 } from "lucide-react";
-import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { signOut } from "firebase/auth";
-import { auth, database } from "./firebase";
-import { ref, set, push, onValue, update, remove } from "firebase/database";
+// Using React animations instead of framer-motion for better compatibility
 
 export default function TaskManager() {
   const [activeTab, setActiveTab] = useState("home");
@@ -20,45 +19,66 @@ export default function TaskManager() {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("Medium");
-  const [tasks, setTasks] = useState([]);
-  const [doneTasks, setDoneTasks] = useState([]);
+  const [tasks, setTasks] = useState([
+    {
+      id: 1,
+      title: "Complete React Project",
+      description: "Finish the task manager application with mobile optimization",
+      dueDate: "2024-12-31T14:30",
+      priority: "High",
+      completed: false
+    },
+    {
+      id: 2,
+      title: "Study for Mathematics Exam",
+      description: "Review chapters 5-8 for the upcoming test",
+      dueDate: "2024-12-28T09:00",
+      priority: "Medium",
+      completed: false
+    }
+  ]);
+  const [doneTasks, setDoneTasks] = useState([
+    {
+      id: 3,
+      title: "Submit Assignment",
+      description: "History essay on World War II",
+      dueDate: "2024-12-20T23:59",
+      priority: "High",
+      completed: true
+    }
+  ]);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDone, setConfirmDone] = useState(null);
   const [confirmUndone, setConfirmUndone] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [expandedTask, setExpandedTask] = useState(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // Mock user for demo
+  const user = { uid: "demo-user", displayName: "Demo User" };
 
-
-  const navigate = useNavigate();
-  const user = auth.currentUser;
-
-  useEffect(() => {
-    if (!user) return;
-
-    const tasksRef = ref(database, "tasks/" + user.uid);
-    const unsubscribe = onValue(tasksRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const allTasks = Object.entries(data).map(([id, task]) => ({
-          id,
-          ...task,
-        }));
-        setTasks(allTasks.filter((task) => !task.completed));
-        setDoneTasks(allTasks.filter((task) => task.completed));
-      } else {
-        setTasks([]);
-        setDoneTasks([]);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+  // Handle tab transitions with fade effect
+  const handleTabChange = (newTab) => {
+    if (newTab === activeTab) return;
+    
+    setIsTransitioning(true);
+    setShowProfileMenu(false);
+    
+    setTimeout(() => {
+      setActiveTab(newTab);
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 50);
+    }, 150);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!taskTitle.trim() || !user) return;
+    if (!taskTitle.trim()) return;
 
     const newTask = {
+      id: Date.now(),
       title: taskTitle,
       description,
       dueDate,
@@ -66,42 +86,33 @@ export default function TaskManager() {
       completed: false,
     };
 
-    try {
-      const tasksRef = ref(database, "tasks/" + user.uid);
-      const newTaskRef = push(tasksRef);
-      await set(newTaskRef, newTask);
-      resetForm();
-      setActiveTab("view");
-    } catch (err) {
-      console.error("Error saving task:", err);
-    }
+    setTasks([...tasks, newTask]);
+    resetForm();
+    setActiveTab("view");
   };
 
   const getMinDateTime = () => {
-  const now = new Date();
-  // Get YYYY-MM-DDTHH:mm (24-hour) format
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
   };
 
   const handleUpdateTask = async (e) => {
-  e.preventDefault();
-  if (!editingTask || !user) return;
+    e.preventDefault();
+    if (!editingTask) return;
 
-  const taskRef = ref(database, `tasks/${user.uid}/${editingTask.id}`);
-  await update(taskRef, {
-    title: taskTitle,
-    description,
-    dueDate,
-    priority,
-  });
+    const updatedTasks = tasks.map(task => 
+      task.id === editingTask.id 
+        ? { ...task, title: taskTitle, description, dueDate, priority }
+        : task
+    );
+    setTasks(updatedTasks);
 
-  resetForm();
-  setEditingTask(null);
-  setActiveTab("view");
-};
-
+    resetForm();
+    setEditingTask(null);
+    setActiveTab("view");
+  };
 
   const resetForm = () => {
     setTaskTitle("");
@@ -111,467 +122,472 @@ export default function TaskManager() {
   };
 
   const handleDelete = async (taskId) => {
-    if (!user) return;
-    await remove(ref(database, `tasks/${user.uid}/${taskId}`));
+    setTasks(tasks.filter(task => task.id !== taskId));
+    setDoneTasks(doneTasks.filter(task => task.id !== taskId));
     setConfirmDelete(null);
   };
 
   const markAsDone = async (taskId) => {
-    if (!user) return;
-    const taskRef = ref(database, `tasks/${user.uid}/${taskId}`);
-    await update(taskRef, { completed: true });
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      const updatedTask = { ...task, completed: true };
+      setTasks(tasks.filter(t => t.id !== taskId));
+      setDoneTasks([...doneTasks, updatedTask]);
+    }
+    setConfirmDone(null);
   };
 
   const markAsUndone = async (taskId) => {
-  if (!user) return;
-  const taskRef = ref(database, `tasks/${user.uid}/${taskId}`);
-  await update(taskRef, { completed: false });
+    const task = doneTasks.find(t => t.id === taskId);
+    if (task) {
+      const updatedTask = { ...task, completed: false };
+      setDoneTasks(doneTasks.filter(t => t.id !== taskId));
+      setTasks([...tasks, updatedTask]);
+    }
+    setConfirmUndone(null);
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "High": return "bg-red-100 text-red-700 border-red-200";
+      case "Medium": return "bg-yellow-100 text-yellow-700 border-yellow-200";
+      case "Low": return "bg-green-100 text-green-700 border-green-200";
+      default: return "bg-gray-100 text-gray-700 border-gray-200";
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "No deadline";
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
   };
 
   const renderTaskList = (taskList, showDoneButton = true, showUndoneButton = false) => {
-  if (taskList.length === 0) {
-    return <p className="text-gray-500">No tasks in this category.</p>;
-  }
+    if (taskList.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">📝</div>
+          <p className="text-gray-500 text-lg">No tasks in this category</p>
+        </div>
+      );
+    }
 
     return (
-    <ul className="space-y-3">
-      {taskList.map((task) => (
-        <li
-          key={task.id}
-          className="p-4 border rounded-lg flex justify-between items-start"
-        >
-          <div>
-            <h3 className="font-medium text-gray-800">{task.title}</h3>
-            <p className="text-sm text-gray-500">{task.description}</p>
-            <p className="text-xs text-gray-400">
-              Due: {task.dueDate || "No deadline"} | Priority:{" "}
-              <span className="font-semibold">{task.priority}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2 items-end ml-4">
-            {/* ✅ Done button with confirmation */}
-            {showDoneButton && (
-              <>
+      <div className="space-y-3">
+        {taskList.map((task, index) => (
+          <div
+            key={task.id}
+            style={{
+              animationDelay: `${index * 100}ms`
+            }}
+            className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 animate-fadeInUp"
+          >
+            <div className="p-4">
+              {/* Task Header */}
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">
+                    {task.title}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(task.priority)}`}>
+                      {task.priority}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Expand/Collapse Button - Mobile */}
                 <button
-                  onClick={() =>
-                    confirmDone === task.id
-                      ? markAsDone(task.id)
-                      : setConfirmDone(task.id)
-                  }
-                  className="text-green-600 hover:underline text-sm flex items-center gap-1"
+                  onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
+                  className="sm:hidden p-1 text-gray-400 hover:text-gray-600"
                 >
-                  <CheckCircle size={16} />
-                  {confirmDone === task.id ? "Confirm Done?" : "Done"}
+                  <ChevronDown 
+                    size={20} 
+                    className={`transition-transform ${expandedTask === task.id ? 'rotate-180' : ''}`}
+                  />
                 </button>
-                {confirmDone === task.id && (
+              </div>
+
+              {/* Task Details */}
+              <div className={`${expandedTask === task.id || window.innerWidth >= 640 ? 'block' : 'hidden'} sm:block`}>
+                {task.description && (
+                  <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                    {task.description}
+                  </p>
+                )}
+                
+                <p className="text-xs text-gray-500 mb-4">
+                  📅 Due: {formatDate(task.dueDate)}
+                </p>
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {/* Done/Undo Button */}
+                  {showDoneButton && (
+                    <button
+                      onClick={() =>
+                        confirmDone === task.id
+                          ? markAsDone(task.id)
+                          : setConfirmDone(task.id)
+                      }
+                      className="flex items-center gap-1 px-3 py-2 text-sm bg-green-50 text-green-600 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                    >
+                      <CheckCircle size={16} />
+                      {confirmDone === task.id ? "Confirm?" : "Done"}
+                    </button>
+                  )}
+
+                  {showUndoneButton && (
+                    <button
+                      onClick={() =>
+                        confirmUndone === task.id
+                          ? markAsUndone(task.id)
+                          : setConfirmUndone(task.id)
+                      }
+                      className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      ↩️ {confirmUndone === task.id ? "Confirm?" : "Undo"}
+                    </button>
+                  )}
+
+                  {/* Edit Button */}
+                  {showDoneButton && (
+                    <button
+                      onClick={() => {
+                        setEditingTask(task);
+                        setTaskTitle(task.title);
+                        setDescription(task.description || "");
+                        setDueDate(task.dueDate || "");
+                        setPriority(task.priority || "Medium");
+                        setActiveTab("edit");
+                      }}
+                      className="flex items-center gap-1 px-3 py-2 text-sm bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                    >
+                      <Edit3 size={16} />
+                      Edit
+                    </button>
+                  )}
+
+                  {/* Delete Button */}
                   <button
-                    onClick={() => setConfirmDone(null)}
-                    className="text-xs text-gray-400 hover:underline"
+                    onClick={() =>
+                      confirmDelete === task.id
+                        ? handleDelete(task.id)
+                        : setConfirmDelete(task.id)
+                    }
+                    className="flex items-center gap-1 px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 size={16} />
+                    {confirmDelete === task.id ? "Confirm?" : "Delete"}
+                  </button>
+                </div>
+
+                {/* Cancel Buttons */}
+                {(confirmDone === task.id || confirmUndone === task.id || confirmDelete === task.id) && (
+                  <button
+                    onClick={() => {
+                      setConfirmDone(null);
+                      setConfirmUndone(null);
+                      setConfirmDelete(null);
+                    }}
+                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline"
                   >
                     Cancel
                   </button>
                 )}
-              </>
-            )}
-              {/* ✅ Edit Task Button */}
-              {showDoneButton && (
-                <>
-                  <button
-                  onClick={() => {
-                    setEditingTask(task);
-                    setTaskTitle(task.title);
-                    setDescription(task.description || "");
-                    setDueDate(task.dueDate || "");
-                    setPriority(task.priority || "Medium");
-                    setActiveTab("edit");
-                  }}
-                  className="text-indigo-600 hover:underline text-sm flex items-center gap-1"
-                >
-                  ✏️ Edit
-                </button>
-
-                </>
-              )}
-            {/* ✅ Undo button with confirmation */}
-            {showUndoneButton && (
-              <>
-                <button
-                  onClick={() =>
-                    confirmUndone === task.id
-                      ? markAsUndone(task.id)
-                      : setConfirmUndone(task.id)
-                  }
-                  className="text-blue-600 hover:underline text-sm flex items-center gap-1"
-                >
-                  ↩️ {confirmUndone === task.id ? "Confirm Undo?" : "Undo"}
-                </button>
-                {confirmUndone === task.id && (
-                  <button
-                    onClick={() => setConfirmUndone(null)}
-                    className="text-xs text-gray-400 hover:underline"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </>
-            )}
-
-            {/* Delete button (already has confirmation) */}
-            <button
-              onClick={() =>
-                confirmDelete === task.id
-                  ? handleDelete(task.id)
-                  : setConfirmDelete(task.id)
-              }
-              className="text-red-500 hover:underline text-sm flex items-center gap-1"
-            >
-              <Trash2 size={16} />
-              {confirmDelete === task.id ? "Confirm?" : "Delete"}
-            </button>
-            {confirmDelete === task.id && (
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="text-xs text-gray-400 hover:underline"
-              >
-                Cancel
-              </button>
-            )}
+              </div>
+            </div>
           </div>
-        </li>
-      ))}
-    </ul>
-  );
+        ))}
+      </div>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-indigo-100 flex flex-col items-center justify-start py-10">
-      <button
-        onClick={() => navigate("/menu")}
-        className="mb-6 px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-      >
-        🔙 Back to Menu
-      </button>
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-indigo-100">
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
 
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-indigo-600 tracking-wide">
-          Note Nudge Mind Board
-        </h1>
-        <b className="text-xl text-gray-500">Task Management System</b>
+        .animate-fadeInUp {
+          animation: fadeInUp 0.5s ease-out forwards;
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out forwards;
+        }
 
+        .staggered-animation {
+          animation-fill-mode: both;
+        }
+      `}</style>
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-indigo-100">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-indigo-600 tracking-wide">
+                Note Nudge Mind Board
+              </h1>
+              <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
+                Task Management System
+              </p>
+            </div>
+
+            {/* Profile Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-full shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <Menu size={16} />
+                <span className="font-medium text-gray-700 hidden sm:inline">Profile</span>
+              </button>
+
+              {showProfileMenu && (
+                <div
+                  className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50"
+                >
+                    <button className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl transition-colors">
+                      <User size={16} className="mr-3" /> Edit Profile
+                    </button>
+                    <button className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                      🔒 <span className="ml-3">Change Password</span>
+                    </button>
+                    <button className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-gray-50 rounded-b-xl transition-colors">
+                      <LogOut size={16} className="mr-3" /> Log Out
+                    </button>
+                  </div>
+                )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-4 mb-6">
-        {["home", "view", "add", "done"].map((tab) => {
-        const icons = {
-          home: <Menu size={18} />,
-          view: <ListTodo size={18} />,
-          add: <PlusCircle size={18} />,
-          done: <CheckCircle size={18} />,
-        };
-        const labels = {
-          home: "Home",
-          view: "View Tasks",
-          add: "Add Task",
-          done: "Done Tasks",
-        };
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
+          {["home", "view", "add", "done"].map((tab) => {
+            const icons = {
+              home: <Menu size={16} />,
+              view: <ListTodo size={16} />,
+              add: <PlusCircle size={16} />,
+              done: <CheckCircle size={16} />,
+            };
+            const labels = {
+              home: "Home",
+              view: "Tasks",
+              add: "Add",
+              done: "Done",
+            };
 
-          return (
-            <motion.button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              whileTap={{ scale: 0.95 }}
-              animate={{
-                backgroundColor:
-                  activeTab === tab ? "rgb(99 102 241)" : "rgb(255 255 255)",
-                color:
-                  activeTab === tab ? "rgb(255 255 255)" : "rgb(75 85 99)",
-              }}
-              transition={{ duration: 0.2 }}
-              className="px-6 py-2 rounded-full shadow-md flex items-center gap-2"
-            >
-              {icons[tab]} {labels[tab]}
-            </motion.button>
-          );
-        })}
+            return (
+              <button
+                key={tab}
+                onClick={() => handleTabChange(tab)}
+                style={{
+                  backgroundColor: activeTab === tab ? "rgb(99 102 241)" : "rgb(255 255 255)",
+                  color: activeTab === tab ? "rgb(255 255 255)" : "rgb(75 85 99)",
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full shadow-sm border border-gray-200 text-sm font-medium whitespace-nowrap transition-all duration-200 hover:scale-105"
+              >
+                {icons[tab]} 
+                <span className="hidden sm:inline">{labels[tab]}</span>
+                <span className="sm:hidden">{labels[tab]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Main Content Card */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+          <div 
+            className={`p-4 sm:p-6 lg:p-8 transition-all duration-300 ease-in-out ${
+              isTransitioning ? 'opacity-0 transform translate-y-4' : 'opacity-100 transform translate-y-0'
+            }`}
+          >
+            {activeTab === "home" && (
+              <div className="text-center space-y-6 animate-fadeIn">
+                <div className="text-6xl mb-4 animate-fadeIn" style={{animationDelay: '200ms'}}>👋</div>
+                <h2 className="text-2xl font-bold text-gray-800 animate-fadeIn" style={{animationDelay: '400ms'}}>Welcome</h2>
+                <p className="text-gray-600 max-w-2xl mx-auto animate-fadeIn" style={{animationDelay: '600ms'}}>
+                  To Note Nudge your personal task manager. Use the tabs above to get started.
+                </p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                  <div className="p-4 bg-indigo-50 rounded-xl animate-fadeIn" style={{animationDelay: '800ms'}}>
+                    <ListTodo className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                    <h3 className="font-semibold text-gray-800">View Tasks</h3>
+                    <p className="text-sm text-gray-600">Check upcoming tasks</p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-xl animate-fadeIn" style={{animationDelay: '900ms'}}>
+                    <PlusCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                    <h3 className="font-semibold text-gray-800">Add Task</h3>
+                    <p className="text-sm text-gray-600">Create new tasks</p>
+                  </div>
+                  <div className="p-4 bg-blue-50 rounded-xl animate-fadeIn" style={{animationDelay: '1000ms'}}>
+                    <CheckCircle className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                    <h3 className="font-semibold text-gray-800">Done Tasks</h3>
+                    <p className="text-sm text-gray-600">Review completed</p>
+                  </div>
+                </div>
+
+                <div className="mt-8 text-left bg-indigo-50 p-6 rounded-xl animate-fadeIn" style={{animationDelay: '1200ms'}}>
+                  <h3 className="text-lg font-bold text-indigo-700 mb-3">
+                    📌 About "Note Nudge Mind Board"
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
+                    <div><strong>Note</strong> → Writing reminders & memos</div>
+                    <div><strong>Nudge</strong> → Gentle push to take action</div>
+                    <div><strong>Mind</strong> → Focus on thoughts & memory</div>
+                    <div><strong>Board</strong> → Organize & visualize tasks</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(activeTab === "add" || activeTab === "edit") && (
+              <div className="space-y-6 animate-fadeIn">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 animate-fadeIn" style={{animationDelay: '200ms'}}>
+                  {activeTab === "add" ? "➕ Add New Task" : "✏️ Edit Task"}
+                </h2>
+
+                <div className="animate-fadeIn" style={{animationDelay: '300ms'}}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Task Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    placeholder="Enter task title..."
+                    required
+                  />
+                </div>
+
+                <div className="animate-fadeIn" style={{animationDelay: '400ms'}}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-all duration-200"
+                    rows={4}
+                    maxLength={500}
+                    placeholder="Add description (optional)..."
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {description.length}/500 characters
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fadeIn" style={{animationDelay: '500ms'}}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Due Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      min={getMinDateTime()}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Priority Level
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {["Low", "Medium", "High"].map((level) => (
+                        <button
+                          type="button"
+                          key={level}
+                          onClick={() => setPriority(level)}
+                          className={`px-3 py-3 rounded-lg border text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                            priority === level
+                              ? getPriorityColor(level)
+                              : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 animate-fadeIn" style={{animationDelay: '600ms'}}>
+                  <button
+                    onClick={activeTab === "add" ? handleSubmit : handleUpdateTask}
+                    className="flex-1 px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                  >
+                    {activeTab === "add" ? "Add Task" : "Save Changes"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      if (activeTab === "edit") {
+                        setEditingTask(null);
+                        handleTabChange("view");
+                      }
+                    }}
+                    className="flex-1 sm:flex-none px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 hover:scale-105"
+                  >
+                    {activeTab === "add" ? "Clear" : "Cancel"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "view" && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-6">
+                  📋 Your Tasks ({tasks.length})
+                </h2>
+                {renderTaskList(tasks, true, false)}
+              </div>
+            )}
+
+            {activeTab === "done" && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-6">
+                  ✅ Completed Tasks ({doneTasks.length})
+                </h2>
+                {renderTaskList(doneTasks, false, true)}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Card Content */}
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="bg-white w-full max-w-2xl rounded-2xl shadow-lg p-8"
-      >
-      {activeTab === "home" ? (
-        // --- Home tab ---
-        <div className="text-center space-y-4">
-          <h2 className="text-2xl font-semibold text-gray-700">👋 Welcome! </h2>
-          <p className="text-gray-600">
-            This is your personal student task manager. Use the tabs above to get started:
-          </p>
-          <ul className="text-gray-500 text-sm space-y-2">
-            <li>📋 <strong>View Tasks</strong> – Check your upcoming tasks</li>
-            <li>➕ <strong>Add Task</strong> – Create a new task with due date and priority</li>
-            <li>✅ <strong>Done Tasks</strong> – Review your completed tasks</li>
-          </ul>
-
-          {/* ✅ Meaning of the title */}
-          <div className="mt-6 text-left bg-indigo-50 p-4 rounded-lg shadow-md inline-block">
-            <h3 className="text-lg font-bold text-indigo-700 mb-2">
-              📌 What does "Note Nudge Mind Board" mean?
-            </h3>
-            <ul className="text-gray-700 text-sm space-y-2">
-              <li><b>Note</b> → Writing things down, quick memos, reminders.</li>
-              <li><b>Nudge</b> → A little push or gentle reminder (nudging you to act).</li>
-              <li><b>Mind</b> → Relates to thoughts, ideas, focus, or memory.</li>
-              <li><b>Board</b> → A place to organize, collect, and visualize tasks (like a Kanban board).</li>
-            </ul>
-          </div>
-        </div>
-
-      ) :activeTab === "add" ? (
-      // --- Add Task tab ---
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
-            ➕ Add New Task
-          </h2>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Task Title *
-            </label>
-            <input
-              type="text"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              rows={3}
-              maxLength={500}
-            />
-            <p className="text-xs text-gray-400">
-              {description.length}/500 characters
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Due Date & Time
-              </label>
-              <input
-                type="datetime-local"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                min={getMinDateTime()}   // 🚀 prevents past date/time
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Priority Level
-              </label>
-              <div className="flex space-x-2">
-                {["Low", "Medium", "High"].map((level) => (
-                  <button
-                    type="button"
-                    key={level}
-                    onClick={() => setPriority(level)}
-                    className={`px-4 py-2 rounded-lg border ${
-                      priority === level
-                        ? "bg-yellow-100 border-yellow-400 text-yellow-700"
-                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button
-              type="submit"
-              className="px-6 py-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600"
-            >
-              Add Task
-            </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-6 py-2 rounded-lg border hover:bg-gray-100"
-            >
-              Clear
-            </button>
-          </div>
-        </form>
-      ) : activeTab === "edit" ? (
-
-        // --- Edit Task tab ---
-        <form onSubmit={handleUpdateTask} className="space-y-6">
-          <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">
-            ✏️ Edit Task
-          </h2>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Task Title *
-            </label>
-            <input
-              type="text"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              rows={3}
-              maxLength={500}
-            />
-            <p className="text-xs text-gray-400">
-              {description.length}/500 characters
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Due Date & Time
-              </label>
-              <input
-                type="datetime-local"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                min={getMinDateTime()}   // 🚀 prevents past date/time
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Priority Level
-              </label>
-              <div className="flex space-x-2">
-                {["Low", "Medium", "High"].map((level) => (
-                  <button
-                    type="button"
-                    key={level}
-                    onClick={() => setPriority(level)}
-                    className={`px-4 py-2 rounded-lg border ${
-                      priority === level
-                        ? "bg-yellow-100 border-yellow-400 text-yellow-700"
-                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <button
-              type="submit"
-              className="px-6 py-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600"
-            >
-              Save Changes
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                resetForm();
-                setEditingTask(null);
-                setActiveTab("view");
-              }}
-              className="px-6 py-2 rounded-lg border hover:bg-gray-100"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : activeTab === "view" ? (
-        // --- View Tasks tab ---
-        <div>
-          <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2 mb-4">
-            📋 Task List
-          </h2>
-          {renderTaskList(tasks, true, false)}
-        </div>
-      ) : (
-        // --- Done Tasks tab ---
-        <div>
-          <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2 mb-4">
-            ✅ Completed Tasks
-          </h2>
-          {renderTaskList(doneTasks, false, true)}
-        </div>
+      {/* Click outside to close profile menu */}
+      {showProfileMenu && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowProfileMenu(false)}
+        />
       )}
-
-
-      </motion.div>
-
-      {/* Profile Dropdown */}
-      <div className="absolute top-6 right-6">
-        <div className="relative group">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border rounded-full shadow hover:bg-gray-50">
-            <Menu size={18} />
-            <span className="font-medium text-gray-700">Profile</span>
-          </button>
-
-          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <button
-              onClick={() => navigate("/profile")}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <User size={16} className="mr-2" /> Edit Profile
-            </button>
-
-            <button
-              onClick={() => navigate("/changepassword")}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              🔒 Change Password
-            </button>
-
-            <button
-              onClick={async () => {
-                await signOut(auth);
-                navigate("/");
-              }}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-            >
-              <LogOut size={16} className="mr-2" /> Log Out
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
-
