@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth, database } from "./firebase";
@@ -13,7 +12,6 @@ import {
   CheckCircle,
   Trash2,
   Edit3,
-  X,
   ChevronDown,
 } from "lucide-react";
 
@@ -24,11 +22,8 @@ export default function TaskManager() {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("Medium");
-  const [tasks, setTasks] = useState([
-
-  ]);
-  const [doneTasks, setDoneTasks] = useState([
-  ]);
+  const [tasks, setTasks] = useState([]);
+  const [doneTasks, setDoneTasks] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDone, setConfirmDone] = useState(null);
   const [confirmUndone, setConfirmUndone] = useState(null);
@@ -37,7 +32,30 @@ export default function TaskManager() {
   const [expandedTask, setExpandedTask] = useState(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Handle tab transitions with fade effect
+  // Load tasks from Firebase on component mount
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    
+    const userId = auth.currentUser.uid;
+    const tasksRef = ref(database, `tasks/${userId}`);
+    const doneTasksRef = ref(database, `doneTasks/${userId}`);
+    
+    const unsubscribeTasks = onValue(tasksRef, (snapshot) => {
+      const data = snapshot.val();
+      setTasks(data ? Object.entries(data).map(([key, value]) => ({ ...value, firebaseKey: key })) : []);
+    });
+    
+    const unsubscribeDoneTasks = onValue(doneTasksRef, (snapshot) => {
+      const data = snapshot.val();
+      setDoneTasks(data ? Object.entries(data).map(([key, value]) => ({ ...value, firebaseKey: key })) : []);
+    });
+    
+    return () => {
+      unsubscribeTasks();
+      unsubscribeDoneTasks();
+    };
+  }, []);
+
   const handleTabChange = (newTab) => {
     if (newTab === activeTab) return;
     
@@ -46,9 +64,7 @@ export default function TaskManager() {
     
     setTimeout(() => {
       setActiveTab(newTab);
-      setTimeout(() => {
-        setIsTransitioning(false);
-      }, 50);
+      setTimeout(() => setIsTransitioning(false), 50);
     }, 150);
   };
 
@@ -63,11 +79,31 @@ export default function TaskManager() {
       dueDate,
       priority,
       completed: false,
+      createdAt: new Date().toISOString(),
     };
 
-    setTasks([...tasks, newTask]);
-    resetForm();
-    setActiveTab("view");
+    // If Firebase is not available, use local state
+    if (!auth.currentUser || !database) {
+      setTasks(prevTasks => [...prevTasks, newTask]);
+      resetForm();
+      setActiveTab("view");
+      return;
+    }
+
+    try {
+      const userId = auth.currentUser.uid;
+      const tasksRef = ref(database, `tasks/${userId}`);
+      await push(tasksRef, newTask);
+      
+      resetForm();
+      setActiveTab("view");
+    } catch (error) {
+      console.error("Error adding task:", error);
+      // Fallback to local state if Firebase fails
+      setTasks(prevTasks => [...prevTasks, newTask]);
+      resetForm();
+      setActiveTab("view");
+    }
   };
 
   const getMinDateTime = () => {
@@ -79,18 +115,28 @@ export default function TaskManager() {
 
   const handleUpdateTask = async (e) => {
     e.preventDefault();
-    if (!editingTask) return;
+    if (!editingTask || !auth.currentUser) return;
 
-    const updatedTasks = tasks.map(task => 
-      task.id === editingTask.id 
-        ? { ...task, title: taskTitle, description, dueDate, priority }
-        : task
-    );
-    setTasks(updatedTasks);
+    const updatedTask = {
+      ...editingTask,
+      title: taskTitle,
+      description,
+      dueDate,
+      priority,
+      updatedAt: new Date().toISOString(),
+    };
 
-    resetForm();
-    setEditingTask(null);
-    setActiveTab("view");
+    try {
+      const userId = auth.currentUser.uid;
+      const taskRef = ref(database, `tasks/${userId}/${editingTask.firebaseKey}`);
+      await update(taskRef, updatedTask);
+      
+      resetForm();
+      setEditingTask(null);
+      setActiveTab("view");
+    } catch (error) {
+      console.error("Error updating task:", error);
+    }
   };
 
   const resetForm = () => {
@@ -100,28 +146,55 @@ export default function TaskManager() {
     setPriority("Medium");
   };
 
-  const handleDelete = async (taskId) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
-    setDoneTasks(doneTasks.filter(task => task.id !== taskId));
+  const handleDelete = async (task) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const userId = auth.currentUser.uid;
+      if (task.completed) {
+        await remove(ref(database, `doneTasks/${userId}/${task.firebaseKey}`));
+      } else {
+        await remove(ref(database, `tasks/${userId}/${task.firebaseKey}`));
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
     setConfirmDelete(null);
   };
 
-  const markAsDone = async (taskId) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (task) {
-      const updatedTask = { ...task, completed: true };
-      setTasks(tasks.filter(t => t.id !== taskId));
-      setDoneTasks([...doneTasks, updatedTask]);
+  const markAsDone = async (task) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const userId = auth.currentUser.uid;
+      const updatedTask = { ...task, completed: true, completedAt: new Date().toISOString() };
+      
+      // Add to done tasks
+      await push(ref(database, `doneTasks/${userId}`), updatedTask);
+      
+      // Remove from active tasks
+      await remove(ref(database, `tasks/${userId}/${task.firebaseKey}`));
+    } catch (error) {
+      console.error("Error marking task as done:", error);
     }
     setConfirmDone(null);
   };
 
-  const markAsUndone = async (taskId) => {
-    const task = doneTasks.find(t => t.id === taskId);
-    if (task) {
+  const markAsUndone = async (task) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const userId = auth.currentUser.uid;
       const updatedTask = { ...task, completed: false };
-      setDoneTasks(doneTasks.filter(t => t.id !== taskId));
-      setTasks([...tasks, updatedTask]);
+      delete updatedTask.completedAt;
+      
+      // Add back to active tasks
+      await push(ref(database, `tasks/${userId}`), updatedTask);
+      
+      // Remove from done tasks
+      await remove(ref(database, `doneTasks/${userId}/${task.firebaseKey}`));
+    } catch (error) {
+      console.error("Error marking task as undone:", error);
     }
     setConfirmUndone(null);
   };
@@ -144,7 +217,7 @@ export default function TaskManager() {
   const renderTaskList = (taskList, showDoneButton = true, showUndoneButton = false) => {
     if (taskList.length === 0) {
       return (
-        <div className="text-center py-12">
+        <div className="text-center py-12 animate-fadeIn">
           <div className="text-6xl mb-4">📝</div>
           <p className="text-gray-500 text-lg">No tasks in this category</p>
         </div>
@@ -155,14 +228,11 @@ export default function TaskManager() {
       <div className="space-y-3">
         {taskList.map((task, index) => (
           <div
-            key={task.id}
-            style={{
-              animationDelay: `${index * 100}ms`
-            }}
-            className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 animate-fadeInUp"
+            key={task.firebaseKey || task.id}
+            className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 animate-slideInUp"
+            style={{ animationDelay: `${index * 100}ms` }}
           >
             <div className="p-4">
-              {/* Task Header */}
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">
@@ -175,20 +245,18 @@ export default function TaskManager() {
                   </div>
                 </div>
                 
-                {/* Expand/Collapse Button - Mobile */}
                 <button
                   onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
-                  className="sm:hidden p-1 text-gray-400 hover:text-gray-600"
+                  className="sm:hidden p-1 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <ChevronDown 
                     size={20} 
-                    className={`transition-transform ${expandedTask === task.id ? 'rotate-180' : ''}`}
+                    className={`transition-transform duration-200 ${expandedTask === task.id ? 'rotate-180' : ''}`}
                   />
                 </button>
               </div>
 
-              {/* Task Details */}
-              <div className={`${expandedTask === task.id || window.innerWidth >= 640 ? 'block' : 'hidden'} sm:block`}>
+              <div className={`${expandedTask === task.id ? 'block' : 'hidden'} sm:block transition-all duration-200`}>
                 {task.description && (
                   <p className="text-sm text-gray-600 mb-3 leading-relaxed">
                     {task.description}
@@ -199,14 +267,12 @@ export default function TaskManager() {
                   📅 Due: {formatDate(task.dueDate)}
                 </p>
 
-                {/* Action Buttons */}
                 <div className="flex flex-wrap gap-2">
-                  {/* Done/Undo Button */}
                   {showDoneButton && (
                     <button
                       onClick={() =>
                         confirmDone === task.id
-                          ? markAsDone(task.id)
+                          ? markAsDone(task)
                           : setConfirmDone(task.id)
                       }
                       className="flex items-center gap-1 px-3 py-2 text-sm bg-green-50 text-green-600 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
@@ -220,7 +286,7 @@ export default function TaskManager() {
                     <button
                       onClick={() =>
                         confirmUndone === task.id
-                          ? markAsUndone(task.id)
+                          ? markAsUndone(task)
                           : setConfirmUndone(task.id)
                       }
                       className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
@@ -229,7 +295,6 @@ export default function TaskManager() {
                     </button>
                   )}
 
-                  {/* Edit Button */}
                   {showDoneButton && (
                     <button
                       onClick={() => {
@@ -247,11 +312,10 @@ export default function TaskManager() {
                     </button>
                   )}
 
-                  {/* Delete Button */}
                   <button
                     onClick={() =>
                       confirmDelete === task.id
-                        ? handleDelete(task.id)
+                        ? handleDelete(task)
                         : setConfirmDelete(task.id)
                     }
                     className="flex items-center gap-1 px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
@@ -261,7 +325,6 @@ export default function TaskManager() {
                   </button>
                 </div>
 
-                {/* Cancel Buttons */}
                 {(confirmDone === task.id || confirmUndone === task.id || confirmDelete === task.id) && (
                   <button
                     onClick={() => {
@@ -269,7 +332,7 @@ export default function TaskManager() {
                       setConfirmUndone(null);
                       setConfirmDelete(null);
                     }}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline"
+                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
                   >
                     Cancel
                   </button>
@@ -285,7 +348,7 @@ export default function TaskManager() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-indigo-100">
       <style jsx>{`
-        @keyframes fadeInUp {
+        @keyframes slideInUp {
           from {
             opacity: 0;
             transform: translateY(20px);
@@ -305,24 +368,20 @@ export default function TaskManager() {
           }
         }
 
-        .animate-fadeInUp {
-          animation: fadeInUp 0.5s ease-out forwards;
+        .animate-slideInUp {
+          animation: slideInUp 0.4s ease-out forwards;
         }
         
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out forwards;
         }
-
-        .staggered-animation {
-          animation-fill-mode: both;
-        }
       `}</style>
-      {/* Header */}
+
       <div className="bg-white shadow-sm border-b border-indigo-100">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font- text-indigo-600 tracking-wide">
+              <h1 className="sm:text-2xl lg:text-3xl font-extrabold text-3xl text-indigo-600 tracking-wide">
                 Note Nudge Mind Board
               </h1>
               <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
@@ -330,7 +389,6 @@ export default function TaskManager() {
               </p>
             </div>
 
-            {/* Profile Menu */}
             <div className="relative">
               <button
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
@@ -341,42 +399,36 @@ export default function TaskManager() {
               </button>
 
               {showProfileMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50"
-                >
-           <button
-              onClick={() => navigate("/profile")}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <User size={16} className="mr-2" /> Edit Profile
-            </button>
-            <button
-              onClick={() => navigate("/changepassword")}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              🔒 Change Password
-            </button>
-            <button
-               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            > </button>
-           <button
-              onClick={async () => {
-                await signOut(auth);
-                navigate("/");
-              }}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-            >
-              <LogOut size={16} className="mr-2" /> Log Out
-            </button>
-                  </div>
-                )}
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
+                  <button
+                    onClick={() => navigate("/editprofile")}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <User size={16} className="mr-2" /> Edit Profile
+                  </button>
+                  <button
+                    onClick={() => navigate("/changepassword")}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    🔒 Change Password
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await signOut(auth);
+                      navigate("/");
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100 transition-colors"
+                  >
+                    <LogOut size={16} className="mr-2" /> Log Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
           {["home", "view", "add", "done"].map((tab) => {
             const icons = {
@@ -396,21 +448,19 @@ export default function TaskManager() {
               <button
                 key={tab}
                 onClick={() => handleTabChange(tab)}
-                style={{
-                  backgroundColor: activeTab === tab ? "rgb(99 102 241)" : "rgb(255 255 255)",
-                  color: activeTab === tab ? "rgb(255 255 255)" : "rgb(75 85 99)",
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-full shadow-sm border border-gray-200 text-sm font-medium whitespace-nowrap transition-all duration-200 hover:scale-105"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-sm border text-sm font-medium whitespace-nowrap transition-all duration-200 hover:scale-105 ${
+                  activeTab === tab 
+                    ? "bg-indigo-600 text-white border-indigo-600" 
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
               >
                 {icons[tab]} 
-                <span className="hidden sm:inline">{labels[tab]}</span>
-                <span className="sm:hidden">{labels[tab]}</span>
+                <span>{labels[tab]}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Main Content Card */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
           <div 
             className={`p-4 sm:p-6 lg:p-8 transition-all duration-300 ease-in-out ${
@@ -419,31 +469,31 @@ export default function TaskManager() {
           >
             {activeTab === "home" && (
               <div className="text-center space-y-6 animate-fadeIn">
-                <div className="text-6xl mb-4 animate-fadeIn" style={{animationDelay: '200ms'}}>👋</div>
-                <h2 className="text-2xl font-bold text-gray-800 animate-fadeIn" style={{animationDelay: '400ms'}}>Welcome</h2>
-                <p className="text-gray-600 max-w-2xl mx-auto animate-fadeIn" style={{animationDelay: '600ms'}}>
+                <div className="text-6xl mb-4">👋</div>
+                <h2 className="text-2xl font-bold text-gray-800">Welcome</h2>
+                <p className="text-gray-600 max-w-2xl mx-auto">
                   To Note Nudge your personal task manager. Use the tabs above to get started.
                 </p>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
-                  <div className="p-4 bg-indigo-50 rounded-xl animate-fadeIn" style={{animationDelay: '800ms'}}>
+                  <div className="p-4 bg-indigo-50 rounded-xl">
                     <ListTodo className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
                     <h3 className="font-semibold text-gray-800">View Tasks</h3>
                     <p className="text-sm text-gray-600">Check upcoming tasks</p>
                   </div>
-                  <div className="p-4 bg-green-50 rounded-xl animate-fadeIn" style={{animationDelay: '900ms'}}>
+                  <div className="p-4 bg-green-50 rounded-xl">
                     <PlusCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
                     <h3 className="font-semibold text-gray-800">Add Task</h3>
                     <p className="text-sm text-gray-600">Create new tasks</p>
                   </div>
-                  <div className="p-4 bg-blue-50 rounded-xl animate-fadeIn" style={{animationDelay: '1000ms'}}>
+                  <div className="p-4 bg-blue-50 rounded-xl">
                     <CheckCircle className="w-8 h-8 text-blue-600 mx-auto mb-2" />
                     <h3 className="font-semibold text-gray-800">Done Tasks</h3>
                     <p className="text-sm text-gray-600">Review completed</p>
                   </div>
                 </div>
 
-                <div className="mt-8 text-left bg-indigo-50 p-6 rounded-xl animate-fadeIn" style={{animationDelay: '1200ms'}}>
+                <div className="mt-8 text-left bg-indigo-50 p-6 rounded-xl">
                   <h3 className="text-lg font-bold text-indigo-700 mb-3">
                     📌 About "Note Nudge Mind Board"
                   </h3>
@@ -459,98 +509,103 @@ export default function TaskManager() {
 
             {(activeTab === "add" || activeTab === "edit") && (
               <div className="space-y-6 animate-fadeIn">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 animate-fadeIn" style={{animationDelay: '200ms'}}>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                   {activeTab === "add" ? "➕ Add New Task" : "✏️ Edit Task"}
                 </h2>
 
-                <div className="animate-fadeIn" style={{animationDelay: '300ms'}}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Task Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                    placeholder="Enter task title..."
-                    required
-                  />
-                </div>
+                <form onSubmit={activeTab === "add" ? handleSubmit : handleUpdateTask}>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Task Title *
+                      </label>
+                      <input
+                        type="text"
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                        placeholder="Enter task title..."
+                        required
+                      />
+                    </div>
 
-                <div className="animate-fadeIn" style={{animationDelay: '400ms'}}>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-all duration-200"
-                    rows={4}
-                    maxLength={500}
-                    placeholder="Add description (optional)..."
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {description.length}/500 characters
-                  </p>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none transition-all duration-200"
+                        rows={4}
+                        maxLength={500}
+                        placeholder="Add description (optional)..."
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {description.length}/500 characters
+                      </p>
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fadeIn" style={{animationDelay: '500ms'}}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Due Date & Time
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      min={getMinDateTime()}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Due Date & Time
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          min={getMinDateTime()}
+                          className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Priority Level
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {["Low", "Medium", "High"].map((level) => (
-                        <button
-                          type="button"
-                          key={level}
-                          onClick={() => setPriority(level)}
-                          className={`px-3 py-3 rounded-lg border text-sm font-medium transition-all duration-200 hover:scale-105 ${
-                            priority === level
-                              ? getPriorityColor(level)
-                              : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Priority Level
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {["Low", "Medium", "High"].map((level) => (
+                            <button
+                              type="button"
+                              key={level}
+                              onClick={() => setPriority(level)}
+                              className={`px-3 py-3 rounded-lg border text-sm font-medium transition-all duration-200 hover:scale-105 ${
+                                priority === level
+                                  ? getPriorityColor(level)
+                                  : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                              }`}
+                            >
+                              {level}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                      <button
+                        type="submit"
+                        className="flex-1 px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+                      >
+                        {activeTab === "add" ? "Add Task" : "Save Changes"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetForm();
+                          if (activeTab === "edit") {
+                            setEditingTask(null);
+                            handleTabChange("view");
+                          }
+                        }}
+                        className="flex-1 sm:flex-none px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 hover:scale-105"
+                      >
+                        {activeTab === "add" ? "Clear" : "Cancel"}
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 pt-4 animate-fadeIn" style={{animationDelay: '600ms'}}>
-                  <button
-                    onClick={activeTab === "add" ? handleSubmit : handleUpdateTask}
-                    className="flex-1 px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                  >
-                    {activeTab === "add" ? "Add Task" : "Save Changes"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      resetForm();
-                      if (activeTab === "edit") {
-                        setEditingTask(null);
-                        handleTabChange("view");
-                      }
-                    }}
-                    className="flex-1 sm:flex-none px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 hover:scale-105"
-                  >
-                    {activeTab === "add" ? "Clear" : "Cancel"}
-                  </button>
-                </div>
+                </form>
               </div>
             )}
 
@@ -575,7 +630,6 @@ export default function TaskManager() {
         </div>
       </div>
 
-      {/* Click outside to close profile menu */}
       {showProfileMenu && (
         <div 
           className="fixed inset-0 z-40" 
