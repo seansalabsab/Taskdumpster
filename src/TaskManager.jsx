@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth, database } from "./firebase";
+import { ref, set, push, onValue, update, remove } from "firebase/database";
 import {
   PlusCircle,
   ListTodo,
@@ -11,41 +16,18 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
-// Using React animations instead of framer-motion for better compatibility
 
 export default function TaskManager() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("home");
   const [taskTitle, setTaskTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("Medium");
   const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: "Complete React Project",
-      description: "Finish the task manager application with mobile optimization",
-      dueDate: "2024-12-31T14:30",
-      priority: "High",
-      completed: false
-    },
-    {
-      id: 2,
-      title: "Study for Mathematics Exam",
-      description: "Review chapters 5-8 for the upcoming test",
-      dueDate: "2024-12-28T09:00",
-      priority: "Medium",
-      completed: false
-    }
+
   ]);
   const [doneTasks, setDoneTasks] = useState([
-    {
-      id: 3,
-      title: "Submit Assignment",
-      description: "History essay on World War II",
-      dueDate: "2024-12-20T23:59",
-      priority: "High",
-      completed: true
-    }
   ]);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [confirmDone, setConfirmDone] = useState(null);
@@ -54,9 +36,6 @@ export default function TaskManager() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [expandedTask, setExpandedTask] = useState(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-
-  // Mock user for demo
-  const user = { uid: "demo-user", displayName: "Demo User" };
 
   // Handle tab transitions with fade effect
   const handleTabChange = (newTab) => {
@@ -343,7 +322,7 @@ export default function TaskManager() {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-indigo-600 tracking-wide">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font- text-indigo-600 tracking-wide">
                 Note Nudge Mind Board
               </h1>
               <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
@@ -365,15 +344,30 @@ export default function TaskManager() {
                 <div
                   className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50"
                 >
-                    <button className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-t-xl transition-colors">
-                      <User size={16} className="mr-3" /> Edit Profile
-                    </button>
-                    <button className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
-                      🔒 <span className="ml-3">Change Password</span>
-                    </button>
-                    <button className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-gray-50 rounded-b-xl transition-colors">
-                      <LogOut size={16} className="mr-3" /> Log Out
-                    </button>
+           <button
+              onClick={() => navigate("/profile")}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            >
+              <User size={16} className="mr-2" /> Edit Profile
+            </button>
+            <button
+              onClick={() => navigate("/changepassword")}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            >
+              🔒 Change Password
+            </button>
+            <button
+               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            > </button>
+           <button
+              onClick={async () => {
+                await signOut(auth);
+                navigate("/");
+              }}
+              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+            >
+              <LogOut size={16} className="mr-2" /> Log Out
+            </button>
                   </div>
                 )}
             </div>
