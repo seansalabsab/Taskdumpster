@@ -8,7 +8,7 @@ import {
 } from "firebase/auth";
 import { database } from "./firebase";
 import { ref, get, set, remove } from "firebase/database";
-import { useNavigate } from "react-router-dom";   // ✅ import navigate
+import { useNavigate } from "react-router-dom"; 
 
 function encodeKey(str) {
   return str.replace(/[.#$\[\]]/g, ",");
@@ -16,7 +16,7 @@ function encodeKey(str) {
 
 export default function EditProfile() {
   const user = getAuth().currentUser;
-  const navigate = useNavigate();  // ✅ initialize navigate
+  const navigate = useNavigate(); 
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     username: "",
