@@ -73,13 +73,6 @@ export default function AuthScreen({ onAuthSuccess }) {
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/90 via-indigo-500/90 to-blue-600/90"></div>
         <div className="relative z-10 flex flex-col justify-center items-center text-white p-12">
           <div className="mb-8 text-center">
-            <div className="flex justify-center">
-              <img
-            src="/NNlogogr.png"
-            alt="Note Nudge Logo"
-            className="w-33 h-20 mb-4"
-            />
-            </div>
             <h1 className="text-4xl font-bold mb-2">Welcome to Note Nudge</h1>
             <p className="text-lg text-white/90">
               {isRegister ? "Create an account to start managing tasks" : "Sign in to your account"}
