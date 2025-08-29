@@ -8,7 +8,8 @@ import {
 } from "firebase/auth";
 import { database } from "./firebase";
 import { ref, get, set, remove } from "firebase/database";
-import { useNavigate } from "react-router-dom"; 
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, User, Mail, Lock, Check, AlertCircle } from "lucide-react";
 
 function encodeKey(str) {
   return str.replace(/[.#$\[\]]/g, ",");
@@ -16,7 +17,7 @@ function encodeKey(str) {
 
 export default function EditProfile() {
   const user = getAuth().currentUser;
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     username: "",
@@ -47,8 +48,10 @@ export default function EditProfile() {
     setSuccess("");
 
     try {
-      // Reauthenticate user
-      const cred = EmailAuthProvider.credential(user.email, form.currentPassword);
+      const cred = EmailAuthProvider.credential(
+        user.email,
+        form.currentPassword
+      );
       await reauthenticateWithCredential(user, cred);
 
       const usernameLower = form.username.toLowerCase();
@@ -56,36 +59,34 @@ export default function EditProfile() {
 
       const encodedUsername = encodeKey(usernameLower);
       const encodedEmail = encodeKey(emailLower);
-      const oldUsername = user.displayName ? encodeKey(user.displayName.toLowerCase()) : "";
+      const oldUsername = user.displayName
+        ? encodeKey(user.displayName.toLowerCase())
+        : "";
       const oldEmail = user.email ? encodeKey(user.email.toLowerCase()) : "";
 
-      // Check username uniqueness
+      // Check uniqueness
       const nameSnap = await get(ref(database, "usernames/" + encodedUsername));
       if (nameSnap.exists() && nameSnap.val() !== user.uid) {
         setError("Username is already used");
         return;
       }
 
-      // Check email uniqueness
       const emailSnap = await get(ref(database, "emails/" + encodedEmail));
       if (emailSnap.exists() && emailSnap.val() !== user.uid) {
         setError("Email is already used");
         return;
       }
 
-      // Update username mapping
       if (oldUsername && oldUsername !== encodedUsername) {
         await remove(ref(database, "usernames/" + oldUsername));
       }
       await set(ref(database, "usernames/" + encodedUsername), user.uid);
 
-      // Update email mapping
       if (oldEmail && oldEmail !== encodedEmail) {
         await remove(ref(database, "emails/" + oldEmail));
       }
       await set(ref(database, "emails/" + encodedEmail), user.uid);
 
-      // Update user profile
       await updateProfile(user, { displayName: form.username });
       await set(ref(database, "users/" + user.uid + "/username"), form.username);
 
@@ -100,69 +101,146 @@ export default function EditProfile() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-indigo-100">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+          <p className="text-indigo-600 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-indigo-50 to-indigo-100 p-6">
-      {/* ✅ Use navigate instead of onBack */}
-      <button
-        onClick={() => navigate("/taskmanager")}
-        className="self-start mb-4 text-indigo-500 hover:underline"
-      >
-        ← Back
-      </button>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-indigo-100 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <button
+            onClick={() => navigate("/taskmanager")}
+            className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 transition-colors duration-200 group"
+          >
+            <ArrowLeft className="h-5 w-5 group-hover:-translate-x-1 transition-transform duration-200" />
+            <span className="font-medium">Back</span>
+          </button>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md space-y-4"
-      >
-        <h2 className="text-2xl font-bold text-gray-800">Edit Profile</h2>
-        {error && <p className="text-red-500">{error}</p>}
-        {success && <p className="text-green-500">{success}</p>}
-
-        <div>
-          <label className="block text-gray-600 mb-1">Username</label>
-          <input
-            name="username"
-            type="text"
-            value={form.username}
-            onChange={handleChange}
-            className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-            required
-          />
+          <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+            <User className="h-6 w-6 text-indigo-600" />
+          </div>
         </div>
 
-        <div>
-          <label className="block text-gray-600 mb-1">Email</label>
-          <input
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-gray-600 mb-1">Current Password*</label>
-          <input
-            name="currentPassword"
-            type="password"
-            value={form.currentPassword}
-            onChange={handleChange}
-            className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400"
-            required
-          />
-        </div>
-
-        <button
-          type="submit"
-          className="w-full bg-indigo-500 text-white py-2 rounded-xl hover:bg-indigo-600"
+        {/* Form Card */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl shadow-indigo-100/50 border border-white/50 overflow-hidden"
         >
-          Save Changes
-        </button>
-      </form>
+          <div className="px-8 py-6 bg-gradient-to-r from-indigo-500 to-indigo-600">
+            <h2 className="text-2xl font-bold text-white text-center">
+              Edit Profile
+            </h2>
+            <p className="text-indigo-100 text-center mt-1">
+              Update your account information
+            </p>
+          </div>
+
+          <div className="p-8 space-y-6">
+            {/* Error / Success */}
+            {error && (
+              <div className="flex items-center space-x-3 p-4 bg-red-50 rounded-xl border border-red-200">
+                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <p className="text-green-700 text-sm">{success}</p>
+              </div>
+            )}
+
+            {/* Username */}
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2 text-gray-700 font-medium">
+                <User className="h-4 w-4 text-indigo-500" />
+                <span>Username</span>
+              </label>
+              <input
+                name="username"
+                type="text"
+                value={form.username}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 placeholder-gray-400"
+                placeholder="Enter your username"
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2 text-gray-700 font-medium">
+                <Mail className="h-4 w-4 text-indigo-500" />
+                <span>Email</span>
+              </label>
+              <input
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 placeholder-gray-400"
+                placeholder="Enter your email"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2 text-gray-700 font-medium">
+                <Lock className="h-4 w-4 text-indigo-500" />
+                <span>Current Password</span>
+                <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="currentPassword"
+                type="password"
+                value={form.currentPassword}
+                onChange={handleChange}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all duration-200 placeholder-gray-400"
+                placeholder="Enter your current password"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Required to verify your identity before making changes
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 pt-6">
+              <button
+                type="button"
+                onClick={() => navigate("/taskmanager")}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-medium transition-all duration-200 hover:scale-105 focus:ring-2 focus:ring-gray-300 focus:outline-none"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white py-3 px-6 rounded-xl font-medium transition-all duration-200 hover:scale-105 focus:ring-2 focus:ring-indigo-400 shadow-lg shadow-indigo-200"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="mt-8 text-center">
+          <p className="text-sm text-gray-500">
+            Make sure your information is accurate and up to date
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

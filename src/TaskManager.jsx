@@ -382,7 +382,7 @@ export default function TaskManager() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="sm:text-2xl lg:text-3xl font-extrabold text-3xl text-indigo-600 tracking-wide">
-                Note Nudge Mind Board
+                Note Nudge.
               </h1>
               <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
                 Task Management System
@@ -429,13 +429,13 @@ export default function TaskManager() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="flex flex-wrap gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
+        <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
           {["home", "view", "add", "done"].map((tab) => {
             const icons = {
-              home: <Menu size={16} />,
-              view: <ListTodo size={16} />,
-              add: <PlusCircle size={16} />,
-              done: <CheckCircle size={16} />,
+              home: <Menu size={14} />,
+              view: <ListTodo size={14} />,
+              add: <PlusCircle size={14} />,
+              done: <CheckCircle size={14} />,
             };
             const labels = {
               home: "Home",
@@ -472,7 +472,7 @@ export default function TaskManager() {
                 <div className="text-6xl mb-4">👋</div>
                 <h2 className="text-2xl font-bold text-gray-800">Welcome</h2>
                 <p className="text-gray-600 max-w-2xl mx-auto">
-                  To Note Nudge your personal task manager. Use the tabs above to get started.
+                  This is Note Nudge your personal task manager. Use the tabs above to get started.
                 </p>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">

@@ -73,8 +73,12 @@ export default function AuthScreen({ onAuthSuccess }) {
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/90 via-indigo-500/90 to-blue-600/90"></div>
         <div className="relative z-10 flex flex-col justify-center items-center text-white p-12">
           <div className="mb-8 text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
-              <div className="w-8 h-8 border-2 border-white rounded transform rotate-45"></div>
+            <div className="flex justify-center">
+              <img
+            src="/NNlogogr.png"
+            alt="Note Nudge Logo"
+            className="w-33 h-20 mb-4"
+            />
             </div>
             <h1 className="text-4xl font-bold mb-2">Welcome to Note Nudge</h1>
             <p className="text-lg text-white/90">
@@ -92,8 +96,12 @@ export default function AuthScreen({ onAuthSuccess }) {
         <div className="w-full max-w-md">
           {/* Title */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-indigo-500 to-blue-600 rounded-xl mb-4">
-              <div className="w-6 h-6 border-2 border-white rounded transform rotate-45"></div>
+            <div className="flex justify-center">
+              <img
+            src="/NNlogo.png"
+            alt="Note Nudge Logo"
+            className="w-33 h-20 mb-4"
+            />
             </div>
             <h2 className="text-3xl font-bold text-gray-800 mb-2">
               {isRegister ? "CREATE ACCOUNT" : "LOGIN"}
@@ -205,7 +213,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                   setIsRegister(!isRegister);
                   setError("");
                 }}
-                className="text-pink-600 hover:text-pink-700 font-semibold"
+                className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
               >
                 {isRegister ? "Sign In" : "Sign Up"}
               </button>
