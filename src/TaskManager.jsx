@@ -379,52 +379,62 @@ export default function TaskManager() {
 
       <div className="bg-white shadow-sm border-b border-indigo-100">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="sm:text-2xl lg:text-3xl font-extrabold text-3xl text-indigo-600 tracking-wide">
-                Note Nudge.
-              </h1>
-              <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
-                Task Management System
-              </p>
-            </div>
+<div className="flex items-center justify-between">
+  {/* Left side: Logo + Title */}
+  <div className="flex items-center gap-3">
+    <img
+      src="/NNlogo.png"
+      alt="Note Nudge Logo"
+      className="h-13 w-20"
+    />
+    <div>
+      <h1 className="sm:text-2xl lg:text-3xl font-extrabold text-3xl text-indigo-600 tracking-wide">
+        Note Nudge.
+      </h1>
+      <p className="text-sm sm:text-base text-gray-500 hidden sm:block">
+        Task Management System
+      </p>
+    </div>
+  </div>
 
-            <div className="relative">
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-full shadow-sm hover:bg-gray-50 transition-colors"
-              >
-                <Menu size={16} />
-                <span className="font-medium text-gray-700 hidden sm:inline">Profile</span>
-              </button>
+  {/* Right side: Dropdown */}
+  <div className="relative">
+    <button
+      onClick={() => setShowProfileMenu(!showProfileMenu)}
+      className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-full shadow-sm hover:bg-gray-50 transition-colors"
+    >
+      <Menu size={16} />
+      <span className="font-medium text-gray-700 hidden sm:inline">Profile</span>
+    </button>
 
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
-                  <button
-                    onClick={() => navigate("/editprofile")}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    <User size={16} className="mr-2" /> Edit Profile
-                  </button>
-                  <button
-                    onClick={() => navigate("/changepassword")}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    🔒 Change Password
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await signOut(auth);
-                      navigate("/");
-                    }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100 transition-colors"
-                  >
-                    <LogOut size={16} className="mr-2" /> Log Out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+    {showProfileMenu && (
+      <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
+        <button
+          onClick={() => navigate("/editprofile")}
+          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+        >
+          <User size={16} className="mr-2" /> Edit Profile
+        </button>
+        <button
+          onClick={() => navigate("/changepassword")}
+          className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+        >
+          🔒 Change Password
+        </button>
+        <button
+          onClick={async () => {
+            await signOut(auth);
+            navigate("/");
+          }}
+          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100 transition-colors"
+        >
+          <LogOut size={16} className="mr-2" /> Log Out
+        </button>
+      </div>
+    )}
+  </div>
+</div>
+
         </div>
       </div>
 
@@ -470,7 +480,7 @@ export default function TaskManager() {
             {activeTab === "home" && (
               <div className="text-center space-y-6 animate-fadeIn">
                 <div className="text-6xl mb-4">👋</div>
-                <h2 className="text-2xl font-bold text-gray-800">Welcome</h2>
+                <h2 className="text-2xl font-bold text-gray-800">Welcome!!</h2>
                 <p className="text-gray-600 max-w-2xl mx-auto">
                   This is Note Nudge your personal task manager. Use the tabs above to get started.
                 </p>

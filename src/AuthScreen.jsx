@@ -75,7 +75,7 @@ export default function AuthScreen({ onAuthSuccess }) {
           <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold mb-2">Welcome to Note Nudge</h1>
             <p className="text-lg text-white/90">
-              {isRegister ? "Create an account to start managing tasks" : "Sign in to your account"}
+              {isRegister ? "Create an account to start managing tasks" : "Your Personal Task Manager."}
             </p>
           </div>
         </div>

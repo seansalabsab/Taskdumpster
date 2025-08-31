@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 import AuthScreen from "./AuthScreen";
@@ -6,7 +6,7 @@ import EditProfile from "./EditProfile";
 import TaskManager from "./TaskManager";
 import ChangePassword from "./ChangePassword";
 
-// // ✅ Reusable fade animation wrapper
+// ✅ Reusable fade animation wrapper
 function AnimatedPage({ children }) {
   return (
     <motion.div
@@ -22,11 +22,12 @@ function AnimatedPage({ children }) {
 
 // ✅ Main routes
 function AppRoutes() {
+  const location = useLocation();  // 👈 needed for AnimatePresence
   const navigate = useNavigate();
 
   return (
     <AnimatePresence mode="wait">
-      <Routes>
+      <Routes location={location} key={location.pathname}>
         {/* Auth Screen (login page) */}
         <Route
           path="/"
