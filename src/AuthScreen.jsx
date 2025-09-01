@@ -34,7 +34,8 @@ export default function AuthScreen({ onAuthSuccess }) {
     setLoginData({ ...loginData, [e.target.name]: e.target.value });
   };
 
-  const handleAuth = async () => {
+  const handleAuth = async (e) => {
+    if (e) e.preventDefault(); // prevent page reload
     setError("");
     try {
       if (isRegister) {
@@ -45,7 +46,11 @@ export default function AuthScreen({ onAuthSuccess }) {
           return;
         }
 
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
         const user = userCredential.user;
 
         await updateProfile(user, { displayName: username });
@@ -75,7 +80,9 @@ export default function AuthScreen({ onAuthSuccess }) {
           <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold mb-2">Welcome to Note Nudge</h1>
             <p className="text-lg text-white/90">
-              {isRegister ? "Create an account to start managing tasks" : "Your Personal Task Manager."}
+              {isRegister
+                ? "Create an account to start managing tasks"
+                : "Your Personal Task Manager."}
             </p>
           </div>
         </div>
@@ -91,16 +98,18 @@ export default function AuthScreen({ onAuthSuccess }) {
           <div className="text-center mb-8">
             <div className="flex justify-center">
               <img
-            src="/NNlogo.png"
-            alt="Note Nudge Logo"
-            className="w-33 h-20 mb-4"
-            />
+                src="/NNlogo.png"
+                alt="Note Nudge Logo"
+                className="w-33 h-20 mb-4"
+              />
             </div>
             <h2 className="text-3xl font-bold text-gray-800 mb-2">
               {isRegister ? "CREATE ACCOUNT" : "LOGIN"}
             </h2>
             <p className="text-gray-600">
-              {isRegister ? "Sign up to get started" : "Sign in to your account"}
+              {isRegister
+                ? "Sign up to get started"
+                : "Sign in to your account"}
             </p>
           </div>
 
@@ -112,7 +121,7 @@ export default function AuthScreen({ onAuthSuccess }) {
           )}
 
           {/* Form Fields */}
-          <div className="space-y-4 mb-6">
+          <form onSubmit={handleAuth} className="space-y-4 mb-6">
             {isRegister && (
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -134,7 +143,9 @@ export default function AuthScreen({ onAuthSuccess }) {
                 type="email"
                 placeholder="Email"
                 value={isRegister ? registerData.email : loginData.email}
-                onChange={isRegister ? handleRegisterChange : handleLoginChange}
+                onChange={
+                  isRegister ? handleRegisterChange : handleLoginChange
+                }
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -146,7 +157,9 @@ export default function AuthScreen({ onAuthSuccess }) {
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 value={isRegister ? registerData.password : loginData.password}
-                onChange={isRegister ? handleRegisterChange : handleLoginChange}
+                onChange={
+                  isRegister ? handleRegisterChange : handleLoginChange
+                }
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               />
               <button
@@ -154,7 +167,11 @@ export default function AuthScreen({ onAuthSuccess }) {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
               </button>
             </div>
 
@@ -171,36 +188,47 @@ export default function AuthScreen({ onAuthSuccess }) {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  onClick={() =>
+                    setShowConfirmPassword(!showConfirmPassword)
+                  }
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                 >
-                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
                 </button>
               </div>
             )}
-          </div>
 
-          {/* Forgot Password */}
-          {!isRegister && (
-            <div className="text-right mb-6">
-              <button className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
-                Forgot Password?
-              </button>
-            </div>
-          )}
+            {/* Forgot Password */}
+            {!isRegister && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            )}
 
-          {/* Submit Button */}
-          <button
-            onClick={handleAuth}
-            className="w-full bg-gradient-to-r from-indigo-500 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-600 hover:to-blue-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            {isRegister ? "CREATE ACCOUNT" : "LOGIN"}
-          </button>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-indigo-500 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-600 hover:to-blue-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg hover:shadow-xl"
+            >
+              {isRegister ? "CREATE ACCOUNT" : "LOGIN"}
+            </button>
+          </form>
 
           {/* Switch to Login/Register */}
           <div className="mt-6 text-center">
             <p className="text-gray-600">
-              {isRegister ? "Already have an account? " : "Don't have an account? "}
+              {isRegister
+                ? "Already have an account? "
+                : "Don't have an account? "}
               <button
                 onClick={() => {
                   setIsRegister(!isRegister);
