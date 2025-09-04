@@ -354,7 +354,7 @@ export default function TaskManager() {
         {/* Nav Tabs */}
         <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
           {["home", "view", "add", "done"].map((tab) => {
-            const icons = { home: <Menu size={14} />, view: <ListTodo size={14} />, add: <PlusCircle size={14} />, done: <CheckCircle size={14} /> };
+            const icons = { home: <Menu size={25} />, view: <ListTodo size={25} />, add: <PlusCircle size={25} />, done: <CheckCircle size={25} /> };
             const labels = { home: "Home", view: "Tasks", add: "Add", done: "Done" };
             return (
               <button
