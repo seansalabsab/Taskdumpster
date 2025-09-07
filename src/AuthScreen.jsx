@@ -39,43 +39,73 @@ export default function AuthScreen({ onAuthSuccess }) {
   };
 
   const handleAuth = async (e) => {
-    if (e) e.preventDefault();
-    setError("");
-    setMessage("");
+  if (e) e.preventDefault();
+  setError("");
+  setMessage("");
 
-    try {
-      if (isRegister) {
-        const { email, password, confirmPassword, username } = registerData;
+  try {
+    if (isRegister) {
+      const { email, password, confirmPassword, username } = registerData;
 
-        if (password !== confirmPassword) {
-          setError("Passwords do not match");
-          return;
-        }
-
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-        const user = userCredential.user;
-
-        await updateProfile(user, { displayName: username });
-
-        await set(ref(database, "users/" + user.uid), {
-          username,
-          email,
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        const { email, password } = loginData;
-        await signInWithEmailAndPassword(auth, email, password);
+      // Username validation (no spaces)
+      if (/\s/.test(username)) {
+        setError("Username should not contain spaces.");
+        return;
+      }
+      if (username.length < 6) {
+        setError("Username must be at least 6 characters long.");
+        return;
       }
 
-      onAuthSuccess();
-    } catch (err) {
-      setError(err.message);
+      // Email validation (basic regex check)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError("Please enter a valid email address.");
+        return;
+      }
+
+      // Password validation
+      const passwordRegex =
+        /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])[A-Za-z\d!@#$%^&*(),.?":{}|<>]{8,}$/;
+      if (!passwordRegex.test(password)) {
+        setError(
+          "Password must be at least 8 characters long, include one uppercase letter, one number, and one special character."
+        );
+        return;
+      }
+
+      // Confirm password check
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+
+      // Firebase register
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+
+      await updateProfile(user, { displayName: username });
+
+      await set(ref(database, "users/" + user.uid), {
+        username,
+        email,
+        createdAt: new Date().toISOString(),
+      });
+    } else {
+      const { email, password } = loginData;
+      await signInWithEmailAndPassword(auth, email, password);
     }
-  };
+
+    onAuthSuccess();
+  } catch (err) {
+    setError(err.message);
+  }
+};
+
 
   const handleForgotPassword = async () => {
     setError("");
