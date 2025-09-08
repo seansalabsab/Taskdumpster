@@ -24,7 +24,7 @@ export default function TaskManager() {
   const [priority, setPriority] = useState("Medium");
   const [tasks, setTasks] = useState([]);
   const [doneTasks, setDoneTasks] = useState([]);
-
+  const [archiveTasks, setArchiveTasks] = useState([]);
   // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(null);
   const [showDoneModal, setShowDoneModal] = useState(null);
@@ -34,9 +34,55 @@ export default function TaskManager() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [expandedTask, setExpandedTask] = useState(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [showArchiveDeleteModal, setShowArchiveDeleteModal] = useState(null);
+  const [showRetrieveModal, setShowRetrieveModal] = useState(null);
 
+  
   // Track which tasks have been notified already
   const [notifiedTasks, setNotifiedTasks] = useState(new Set());
+
+  const retrieveTask = async (task) => {
+  if (!auth.currentUser) return;
+  const userId = auth.currentUser.uid;
+
+  if (task.reason === "Overdue" && (!task.dueDate || new Date(task.dueDate) < new Date())) {
+    alert("⚠️ Please update the due date before retrieving this task.");
+    return;
+  }
+
+  try {
+    await push(ref(database, `tasks/${userId}`), {
+      ...task,
+      retrievedAt: new Date().toISOString(),
+    });
+    await remove(ref(database, `archiveTasks/${userId}/${task.firebaseKey}`));
+  } catch (err) {
+    console.error("Error retrieving task:", err);
+  }
+  };
+
+
+  const moveToArchive = async (task) => {
+  if (!auth.currentUser) return;
+  try {
+    const userId = auth.currentUser.uid;
+    await push(ref(database, `archiveTasks/${userId}`), {
+      ...task,
+      archivedAt: new Date().toISOString(),
+      reason: task.dueDate && new Date(task.dueDate) < new Date() 
+        ? "Overdue" 
+        : "Deleted"
+    });
+
+    // remove from tasks or doneTasks
+    const path = task.completed
+      ? `doneTasks/${userId}/${task.firebaseKey}`
+      : `tasks/${userId}/${task.firebaseKey}`;
+    await remove(ref(database, path));
+  } catch (err) {
+    console.error("Error archiving task:", err);
+  }
+  };
 
   // Load tasks
   useEffect(() => {
@@ -61,10 +107,18 @@ export default function TaskManager() {
         : []
       );
     });
+    const archiveRef = ref(database, `archiveTasks/${userId}`);
+    const unsubArchive = onValue(archiveRef, (snap) => {
+  const data = snap.val();
+  setArchiveTasks(
+    data ? Object.entries(data).map(([k, v]) => ({ ...v, firebaseKey: k })) : []
+  );
+    });
 
     return () => {
       unsubTasks();
       unsubDone();
+      unsubArchive();
     };
   }, []);
 
@@ -77,37 +131,57 @@ export default function TaskManager() {
 
   // Periodic check for upcoming deadlines
   useEffect(() => {
-    if (!tasks.length) return;
+  if (!tasks.length) return;
 
-    const interval = setInterval(() => {
-      const now = new Date();
-      const soon = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes from now
+  const interval = setInterval(() => {
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    const fifteenMinFromNow = new Date(now.getTime() + 15 * 60 * 1000);
 
-      tasks.forEach((task) => {
-        if (!task.dueDate) return;
-        const due = new Date(task.dueDate);
+    tasks.forEach((task) => {
+      if (!task.dueDate) return;
+      const due = new Date(task.dueDate);
+      const taskId = task.id || task.firebaseKey;
 
-        if (
-          due > now &&
-          due <= soon &&
-          Notification.permission === "granted" &&
-          !notifiedTasks.has(task.id || task.firebaseKey)
-        ) {
-          new Notification("⏰ Task Reminder!", {
-            body: `${task.title} is due at ${due.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}`,
-            icon: "/NNlogo.png",
-          });
+      // 🔔 1 hour before
+      if (
+        due > now &&
+        due <= oneHourFromNow &&
+        Notification.permission === "granted" &&
+        !notifiedTasks.has(`${taskId}-1h`)
+      ) {
+        new Notification("⏰ Task Reminder!", {
+          body: `${task.title} is due in 1 hour (at ${due.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })})`,
+          icon: "/NNlogo.png",
+        });
+        setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-1h`));
+      }
 
-          setNotifiedTasks((prev) => new Set(prev).add(task.id || task.firebaseKey));
-        }
-      });
-    }, 60 * 1000); // check every 1 minute
+      // 🔔 15 minutes before
+      if (
+        due > now &&
+        due <= fifteenMinFromNow &&
+        Notification.permission === "granted" &&
+        !notifiedTasks.has(`${taskId}-15m`)
+      ) {
+        new Notification("⚠️ Task Reminder!", {
+          body: `${task.title} is due in 15 minutes (at ${due.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })})`,
+          icon: "/NNlogo.png",
+        });
+        setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-15m`));
+      }
+    });
+  }, 60 * 1000); // check every 1 minute
 
-    return () => clearInterval(interval);
+  return () => clearInterval(interval);
   }, [tasks, notifiedTasks]);
+
 
   // Tab change with a fade
   const handleTabChange = (newTab) => {
@@ -124,6 +198,17 @@ export default function TaskManager() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!taskTitle.trim()) return;
+
+    if (dueDate) {
+      const selected = new Date(dueDate);
+      const minAllowed = new Date();
+      minAllowed.setHours(minAllowed.getHours() + 1);
+
+      if (selected < minAllowed) {
+        alert("⚠️ Please choose a time at least 1 hour from now.");
+        return;
+      }
+    }
 
     const newTask = {
       id: Date.now(),
@@ -213,17 +298,11 @@ export default function TaskManager() {
     setShowUndoModal(null);
   };
 
-  const handleDelete = async (task) => {
-    if (!auth.currentUser) return;
-    try {
-      const userId = auth.currentUser.uid;
-      const path = task.completed ? `doneTasks/${userId}/${task.firebaseKey}` : `tasks/${userId}/${task.firebaseKey}`;
-      await remove(ref(database, path));
-    } catch (err) {
-      console.error("Error deleting:", err);
-    }
-    setShowDeleteModal(null);
+  const handleDelete = (task) => {
+  moveToArchive(task);
+  setShowDeleteModal(null);
   };
+
 
   // UI helpers
   const getPriorityColor = (level) => ({
@@ -234,6 +313,14 @@ export default function TaskManager() {
 
   const formatDate = (dt) =>
     dt ? new Date(dt).toLocaleDateString() + " " + new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "No deadline";
+
+
+  // const getMinDateTime = () => {
+  //   const now = new Date();
+  //   return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+  //     .toISOString()
+  //     .slice(0, 16);
+  // };
 
   function getMinDateTime() {
   const now = new Date();
@@ -339,12 +426,13 @@ export default function TaskManager() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-indigo-100">
-      <style jsx>{`
-        @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-slideInUp { animation: slideInUp 0.4s ease-out forwards; }
-        .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-      `}</style>
+      <style>{`
+      @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .animate-slideInUp { animation: slideInUp 0.4s ease-out forwards; }
+      .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
+    `}</style>
+
 
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-indigo-100">
@@ -397,9 +485,9 @@ export default function TaskManager() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Nav Tabs */}
         <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-6 overflow-x-auto pb-2">
-          {["home", "view", "add", "done"].map((tab) => {
-            const icons = { home: <Menu size={14} />, view: <ListTodo size={14} />, add: <PlusCircle size={14} />, done: <CheckCircle size={14} /> };
-            const labels = { home: "Home", view: "Tasks", add: "Add", done: "Done" };
+          {["home", "view", "add", "done", "archive"].map((tab) => {
+            const icons = { home: <Menu size={14} />, view: <ListTodo size={14} />, add: <PlusCircle size={14} />, done: <CheckCircle size={14} />,  archive: <Trash2 size={14} /> };
+            const labels = { home: "Home", view: "Tasks", add: "Add", done: "Done", archive: "Archive" };
             return (
               <button
                 key={tab}
@@ -426,7 +514,7 @@ export default function TaskManager() {
                 <p className="text-gray-600 max-w-2xl mx-auto">
                   This is Note Nudge your personal task manager. Use the tabs above to get started.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
                   <div className="p-4 bg-indigo-50 rounded-xl text-center">
                     <ListTodo className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
                     <h3 className="font-semibold text-gray-800">View Tasks</h3>
@@ -442,9 +530,14 @@ export default function TaskManager() {
                     <h3 className="font-semibold text-gray-800">Done Tasks</h3>
                     <p className="text-sm text-gray-600">Review completed</p>
                   </div>
+                  <div className="p-4 bg-red-50 rounded-xl text-center">
+                    <Trash2 className="w-8 h-8 text-red-600 mx-auto mb-2" />
+                    <h3 className="font-semibold text-gray-800">Archive</h3>
+                    <p className="text-sm text-gray-600">View deleted/overdue tasks</p>
+                  </div>
                 </div>
                 <div className="mt-8 text-left bg-indigo-50 p-6 rounded-xl">
-                  <h3 className="text-lg font-bold text-indigo-700 mb-3">📌 About "Note Nudge Mind Board"</h3>
+                  <h3 className="text-lg font-bold text-indigo-700 mb-3 text-center">📌 About "Note Nudge Mind Board"</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
                     <div><strong>Note</strong> → Writing reminders & memos</div>
                     <div><strong>Nudge</strong> → Gentle push to take action</div>
@@ -557,6 +650,87 @@ export default function TaskManager() {
                 {renderTaskList(doneTasks, false, true)}
               </div>
             )}
+            {activeTab === "archive" && (
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-6">
+                  🗄️ Archived Tasks ({archiveTasks.length})
+                </h2>
+                {archiveTasks.length === 0 ? (
+                  <p className="text-gray-500 text-center">No archived tasks.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {archiveTasks.map((task, idx) => (
+                      <div
+                        key={task.firebaseKey}
+                        className="bg-gray-50 border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 animate-slideInUp"
+                        style={{ animationDelay: `${idx * 100}ms` }}
+                      >
+                        <div className="p-4">
+                          {/* Header with title + collapse toggle */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 text-base sm:text-lg truncate">
+                                {task.title}
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Reason: <span className="font-medium">{task.reason}</span>
+                              </p>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setExpandedTask(expandedTask === task.firebaseKey ? null : task.firebaseKey)
+                              }
+                              className="sm:hidden p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <ChevronDown
+                                size={20}
+                                className={`transition-transform duration-200 ${
+                                  expandedTask === task.firebaseKey ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          {/* Expandable details */}
+                          <div
+                            className={`${
+                              expandedTask === task.firebaseKey ? "block" : "hidden"
+                            } sm:block transition-all duration-200`}
+                          >
+                            {task.description && (
+                              <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+                                {task.description}
+                              </p>
+                            )}
+
+                            <p className="text-xs text-gray-500">
+                              📅 Archived At: {new Date(task.archivedAt).toLocaleString()}
+                            </p>
+
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                onClick={() => setShowRetrieveModal(task)}
+                                className="flex items-center gap-1 px-3 py-2 text-sm bg-green-50 text-green-600 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                              >
+                                ♻️ Retrieve
+                              </button>
+                              <button
+                                onClick={() => setShowArchiveDeleteModal(task)}
+                                className="flex items-center gap-1 px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                              >
+                                🗑️ Delete Permanently
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+
           </div>
         </div>
       </div>
@@ -582,12 +756,43 @@ export default function TaskManager() {
           onCancel={() => setShowUndoModal(null)}
         />
       )}
-      {showDeleteModal && (
+            {showDeleteModal && (
         <ConfirmationModal
           title="Delete Task?"
           message={`Are you sure you want to delete "${showDeleteModal.title}"? This cannot be undone.`}
           onConfirm={() => handleDelete(showDeleteModal)}
           onCancel={() => setShowDeleteModal(null)}
+        />
+      )}
+
+      {/* 🔹 Retrieve Confirmation */}
+      {showRetrieveModal && (
+        <ConfirmationModal
+          title="Retrieve Task?"
+          message={`Do you want to restore "${showRetrieveModal.title}" back to your active tasks?`}
+          onConfirm={() => {
+            retrieveTask(showRetrieveModal);
+            setShowRetrieveModal(null);
+          }}
+          onCancel={() => setShowRetrieveModal(null)}
+        />
+      )}
+
+      {/* 🔹 Permanent Delete Confirmation */}
+      {showArchiveDeleteModal && (
+        <ConfirmationModal
+          title="Delete Task?"
+          message={`Are you sure you want to permanently delete "${showArchiveDeleteModal.title}"? This cannot be undone.`}
+          onConfirm={async () => {
+            await remove(
+              ref(
+                database,
+                `archiveTasks/${auth.currentUser.uid}/${showArchiveDeleteModal.firebaseKey}`
+              )
+            );
+            setShowArchiveDeleteModal(null);
+          }}
+          onCancel={() => setShowArchiveDeleteModal(null)}
         />
       )}
     </div>
