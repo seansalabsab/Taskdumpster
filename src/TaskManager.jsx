@@ -35,6 +35,9 @@ export default function TaskManager() {
   const [expandedTask, setExpandedTask] = useState(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // Track which tasks have been notified already
+  const [notifiedTasks, setNotifiedTasks] = useState(new Set());
+
   // Load tasks
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -64,6 +67,47 @@ export default function TaskManager() {
       unsubDone();
     };
   }, []);
+
+  // Ask for Notification permission once
+  useEffect(() => {
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Periodic check for upcoming deadlines
+  useEffect(() => {
+    if (!tasks.length) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const soon = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes from now
+
+      tasks.forEach((task) => {
+        if (!task.dueDate) return;
+        const due = new Date(task.dueDate);
+
+        if (
+          due > now &&
+          due <= soon &&
+          Notification.permission === "granted" &&
+          !notifiedTasks.has(task.id || task.firebaseKey)
+        ) {
+          new Notification("⏰ Task Reminder!", {
+            body: `${task.title} is due at ${due.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`,
+            icon: "/NNlogo.png",
+          });
+
+          setNotifiedTasks((prev) => new Set(prev).add(task.id || task.firebaseKey));
+        }
+      });
+    }, 60 * 1000); // check every 1 minute
+
+    return () => clearInterval(interval);
+  }, [tasks, notifiedTasks]);
 
   // Tab change with a fade
   const handleTabChange = (newTab) => {
@@ -191,12 +235,12 @@ export default function TaskManager() {
   const formatDate = (dt) =>
     dt ? new Date(dt).toLocaleDateString() + " " + new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "No deadline";
 
-  const getMinDateTime = () => {
-    const now = new Date();
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-  };
+  function getMinDateTime() {
+  const now = new Date();
+  now.setHours(now.getHours() + 1); // add 1 hour
+  return now.toISOString().slice(0, 16); // format for datetime-local
+  }
+
 
   const renderTaskList = (list, showDone = true, showUndo = false) => {
     if (!list.length) {
