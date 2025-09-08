@@ -17,7 +17,6 @@ import {
 
 export default function TaskManager() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("home");
   const [taskTitle, setTaskTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -41,18 +40,51 @@ export default function TaskManager() {
   // Track which tasks have been notified already
   const [notifiedTasks, setNotifiedTasks] = useState(new Set());
 
+
+  
+
+  const autoArchiveOverdue = async () => {
+  if (!auth.currentUser) return;
+  const userId = auth.currentUser.uid;
+
+  const now = new Date();
+
+  for (const task of tasks) {
+    if (task.dueDate && new Date(task.dueDate) < now) {
+      // ⏰ Move to archive if overdue
+      await push(ref(database, `archiveTasks/${userId}`), {
+        ...task,
+        archivedAt: new Date().toISOString(),
+        reason: "Overdue",
+      });
+
+      // Remove from active tasks
+      await remove(ref(database, `tasks/${userId}/${task.firebaseKey}`));
+    }
+  }
+  };
+
+  const [activeTab, setActiveTab] = useState(() => {
+  return localStorage.getItem("activeTab") || "home";
+  });
+
+
   const retrieveTask = async (task) => {
   if (!auth.currentUser) return;
   const userId = auth.currentUser.uid;
 
-  if (task.reason === "Overdue" && (!task.dueDate || new Date(task.dueDate) < new Date())) {
-    alert("⚠️ Please update the due date before retrieving this task.");
-    return;
+  let updatedTask = { ...task };
+
+  // If overdue → set new due date to next hour
+  if (task.reason === "Overdue") {
+    const newDue = new Date();
+    newDue.setHours(newDue.getHours() + 1);
+    updatedTask.dueDate = newDue.toISOString();
   }
 
   try {
     await push(ref(database, `tasks/${userId}`), {
-      ...task,
+      ...updatedTask,
       retrievedAt: new Date().toISOString(),
     });
     await remove(ref(database, `archiveTasks/${userId}/${task.firebaseKey}`));
@@ -60,6 +92,7 @@ export default function TaskManager() {
     console.error("Error retrieving task:", err);
   }
   };
+
 
 
   const moveToArchive = async (task) => {
@@ -87,6 +120,7 @@ export default function TaskManager() {
   // Load tasks
   useEffect(() => {
     if (!auth.currentUser) return;
+    
 
     const userId = auth.currentUser.uid;
     const tasksRef = ref(database, `tasks/${userId}`);
@@ -130,68 +164,82 @@ export default function TaskManager() {
   }, []);
 
   // Periodic check for upcoming deadlines
+  // Periodic check for overdue + reminders
+  // Periodic check for overdue + reminders
   useEffect(() => {
-  if (!tasks.length) return;
+    if (!tasks.length) return;
 
-  const interval = setInterval(() => {
-    const now = new Date();
-    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-    const fifteenMinFromNow = new Date(now.getTime() + 15 * 60 * 1000);
+    const checkTasks = () => {
+      const now = new Date();
+      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+      const fifteenMinFromNow = new Date(now.getTime() + 15 * 60 * 1000);
 
-    tasks.forEach((task) => {
-      if (!task.dueDate) return;
-      const due = new Date(task.dueDate);
-      const taskId = task.id || task.firebaseKey;
+      // 🔹 Archive overdue tasks immediately
+      autoArchiveOverdue();
 
-      // 🔔 1 hour before
-      if (
-        due > now &&
-        due <= oneHourFromNow &&
-        Notification.permission === "granted" &&
-        !notifiedTasks.has(`${taskId}-1h`)
-      ) {
-        new Notification("⏰ Task Reminder!", {
-          body: `${task.title} is due in 1 hour (at ${due.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })})`,
-          icon: "/NNlogo.png",
-        });
-        setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-1h`));
-      }
+      // 🔹 Notifications
+      tasks.forEach((task) => {
+        if (!task.dueDate) return;
+        const due = new Date(task.dueDate);
+        const taskId = task.id || task.firebaseKey;
 
-      // 🔔 15 minutes before
-      if (
-        due > now &&
-        due <= fifteenMinFromNow &&
-        Notification.permission === "granted" &&
-        !notifiedTasks.has(`${taskId}-15m`)
-      ) {
-        new Notification("⚠️ Task Reminder!", {
-          body: `${task.title} is due in 15 minutes (at ${due.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })})`,
-          icon: "/NNlogo.png",
-        });
-        setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-15m`));
-      }
-    });
-  }, 60 * 1000); // check every 1 minute
+        // 1 hour before
+        if (
+          due > now &&
+          due <= oneHourFromNow &&
+          Notification.permission === "granted" &&
+          !notifiedTasks.has(`${taskId}-1h`)
+        ) {
+          new Notification("⏰ Task Reminder!", {
+            body: `${task.title} is due in 1 hour (at ${due.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })})`,
+            icon: "/NNlogo.png",
+          });
+          setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-1h`));
+        }
 
-  return () => clearInterval(interval);
+        // 15 minutes before
+        if (
+          due > now &&
+          due <= fifteenMinFromNow &&
+          Notification.permission === "granted" &&
+          !notifiedTasks.has(`${taskId}-15m`)
+        ) {
+          new Notification("⚠️ Task Reminder!", {
+            body: `${task.title} is due in 15 minutes (at ${due.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })})`,
+            icon: "/NNlogo.png",
+          });
+          setNotifiedTasks((prev) => new Set(prev).add(`${taskId}-15m`));
+        }
+      });
+    };
+
+    // 🔹 Run once immediately on mount
+    checkTasks();
+
+    // 🔹 Then run every 1 minute
+    const interval = setInterval(checkTasks, 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [tasks, notifiedTasks]);
+
 
 
   // Tab change with a fade
   const handleTabChange = (newTab) => {
-    if (newTab === activeTab) return;
-    setIsTransitioning(true);
-    setShowProfileMenu(false);
-    setTimeout(() => {
-      setActiveTab(newTab);
-      setTimeout(() => setIsTransitioning(false), 50);
-    }, 150);
+  if (newTab === activeTab) return;
+  setIsTransitioning(true);
+  setShowProfileMenu(false);
+  setTimeout(() => {
+    setActiveTab(newTab);
+    localStorage.setItem("activeTab", newTab); // 👈 save tab
+    setTimeout(() => setIsTransitioning(false), 50);
+  }, 150);
   };
 
   // Add Task
@@ -199,6 +247,7 @@ export default function TaskManager() {
     e.preventDefault();
     if (!taskTitle.trim()) return;
 
+    //due date
     if (dueDate) {
       const selected = new Date(dueDate);
       const minAllowed = new Date();
